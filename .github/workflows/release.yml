@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  gate:
+    name: Verify Quality Gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Setup Java 23
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: 'temurin'
+          java-version: '23'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
+        with:
+          toolchain: 1.93.0
+
+      - name: Install just
+        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+        with:
+          tool: just@1.58.0
+
+      - name: Setup Pollux Core native library
+        run: |
+          git clone --depth 1 https://github.com/sxnnyside-project/pollux-polyglot-native-bridge.git ../pollux-polyglot-native-bridge
+          cargo test --manifest-path ../pollux-polyglot-native-bridge/Cargo.toml --no-run
+          LIB_FILE=$(find ../pollux-polyglot-native-bridge/target -name "libpollux_ffi.*" | head -n 1)
+          mkdir -p lib
+          cp "$LIB_FILE" lib/
+          echo "POLLUX_CORE_LIB=$(pwd)/lib/$(basename "$LIB_FILE")" >> $GITHUB_ENV
+          echo "POLLUX_FFI_PATH=$(pwd)/lib/$(basename "$LIB_FILE")" >> $GITHUB_ENV
+
+      - run: just install
+      - run: just check
+
+  publish:
+    name: GitHub Release & Maven Central
+    needs: gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Setup Java 23
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: 'temurin'
+          java-version: '23'
+
+      - name: Install just
+        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+        with:
+          tool: just@1.58.0
+
+      - run: just install
+      - run: just build
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME:-v0.1.0}"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file CHANGELOG.md \
+            --verify-tag || true
+
+      - name: Publish to Maven Central (Sonatype Portal)
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          SIGNING_KEY_ID: ${{ secrets.SIGNING_KEY_ID }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+          SIGNING_SECRET_KEY: ${{ secrets.SIGNING_SECRET_KEY }}
+        run: |
+          if [ -n "$MAVEN_CENTRAL_USERNAME" ] && [ -n "$SIGNING_SECRET_KEY" ]; then
+            just publish || echo "Version already published or skipped."
+          else
+            echo "Maven Central or GPG signing credentials not set in repository secrets; skipping CI publish."
+          fi
