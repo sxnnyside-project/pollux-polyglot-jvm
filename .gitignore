@@ -1,0 +1,21 @@
+# Build and caches
+.gradle/
+build/
+bin/
+out/
+
+# IDE and Editor
+.idea/
+*.iml
+.vscode/
+
+# OS and logs
+.DS_Store
+*.log
+
+# Native local binaries
+lib/
+
+# Environment and secrets
+.env
+.env*.local

@@ -1,0 +1,25 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Explicit text files
+*.java text diff=java eol=lf
+*.kt text diff=kotlin eol=lf
+*.kts text diff=kotlin eol=lf
+*.gradle text eol=lf
+*.properties text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.sh text eol=lf
+Justfile text eol=lf
+gradlew text eol=lf
+
+# Executable wrappers
+gradlew.bat text eol=crlf
+
+# Binary files
+*.jar binary
+*.so binary
+*.dylib binary
+*.dll binary

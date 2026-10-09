@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commits:
+    name: Conventional Commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Validate commit messages
+        env:
+          BASE: origin/${{ github.base_ref }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-commit-range.sh "$BASE" "$HEAD"
+
+  check:
+    name: check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Setup Java 23
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: 'temurin'
+          java-version: '23'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
+        with:
+          toolchain: 1.93.0
+
+      - name: Install just
+        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+        with:
+          tool: just@1.58.0
+
+      - name: Setup Pollux Core native library
+        run: |
+          git clone --depth 1 https://github.com/sxnnyside-project/pollux-polyglot-native-bridge.git ../pollux-polyglot-native-bridge
+          cargo test --manifest-path ../pollux-polyglot-native-bridge/Cargo.toml --no-run
+          LIB_FILE=$(find ../pollux-polyglot-native-bridge/target -name "libpollux_ffi.*" | head -n 1)
+          mkdir -p lib
+          cp "$LIB_FILE" lib/
+          echo "POLLUX_CORE_LIB=$(pwd)/lib/$(basename "$LIB_FILE")" >> $GITHUB_ENV
+          echo "POLLUX_FFI_PATH=$(pwd)/lib/$(basename "$LIB_FILE")" >> $GITHUB_ENV
+
+      - run: just install
+      - run: just check
