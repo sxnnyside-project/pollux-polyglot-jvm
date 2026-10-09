@@ -36,9 +36,9 @@ check: typecheck test
 publish-local:
     ./gradlew publishToMavenLocal --no-daemon
 
-# Publish to Maven Central (Sonatype Portal).
+# Publish to Maven Central (Sonatype Central Portal API).
 publish:
-    ./gradlew publish --no-daemon
+    ./scripts/publish-central.sh
 
 # Clean build directory and caches.
 clean:
